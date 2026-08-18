@@ -1,0 +1,404 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+import matplotlib.colors as mcolors
+from matplotlib.patches import Circle
+
+from copy import deepcopy
+
+class Ring:
+	def __init__(self, outer_diameter, inner_diameter):
+		self.outer_diameter = outer_diameter
+		self.inner_diameter = inner_diameter
+
+	@property
+	def outer_diameter(self):
+		if not hasattr(self, '_outer_diameter'):
+			raise( ValueError("Outer diameter is not set in this object.") )
+		return self._outer_diameter
+
+	@outer_diameter.setter
+	def outer_diameter(self, value):
+		# if self.inner_diameter > value:
+			# raise( ValueError("Outer diameter must be greater than inner diameter.") )
+		self._outer_diameter = float(value)
+
+
+	@property
+	def inner_diameter(self):
+		if not hasattr(self, '_inner_diameter'):
+			return 0
+		return self._inner_diameter
+	@inner_diameter.setter
+
+	def inner_diameter(self, value):
+		if value < 0:
+			raise( ValueError("Inner diameter must be >= 0.") )
+		# if self.outer_diameter < value:
+			# raise( ValueError("Inner diameter must be lesser than outer diameter") )
+
+		self._inner_diameter = float(value)
+
+
+	@property
+	def ratio(self):
+		return self.inner_diameter / self.outer_diameter
+
+
+class Capillary(Ring):
+	def __init__(self, position_x=0, position_y=0, *args, **kwargs):
+		self._position = np.zeros(2)
+		self.position = [position_x, position_y]
+		super().__init__(*args, **kwargs)
+
+	@property
+	def position_x(self):
+		return self._position[0]
+	
+	@position_x.setter
+	def position_x(self, value):
+		self._position[0] = float(value)
+
+	@property
+	def position_y(self):
+		return self._position[1]
+	
+	@position_y.setter
+	def position_y(self, value):
+		self._position[1] = float(value)
+
+	@property
+	def position(self):
+		return self._position
+	
+	@position.setter
+	def position(self, value):
+		if len(value) != 2:
+			raise( ValueError("Position must be 2D.") )
+		self.position_x = value[0]
+		self.position_y = value[1]
+
+
+	def as_dict(self):
+		return {'position_x': self.position_x,
+				'position_y': self.position_y,
+				'outer_diameter': self.outer_diameter,
+				'inner_diameter': self.inner_diameter}
+
+
+	def to_str(self):
+		ret = ''
+		dict_like = self.as_dict()
+		for k,v in dict_like.items():
+			ret += f"{k}: {v}\t"
+		return ret[:-1]
+
+
+	def copy(self):
+		return Capillary(**self.as_dict())
+
+
+	def is_inside(self, capillary):
+		'''
+			Checks if either this capillary is inside the provided one or the other way around,
+				returning 1 if they are nested, or 0 if they aren't.
+
+			capillary:Capillary     Capillary to check against
+		'''
+
+		# Checks if the capillaries can be inside one another
+		if (self.outer_diameter > capillary.inner_diameter and \
+			capillary.outer_diameter > self.inner_diameter):
+			return False
+
+		center_distance = np.linalg.norm(self.position - capillary.position)
+		if self.outer_diameter > capillary.outer_diameter:
+			bigger_capillary = self
+			smaller_capillary = capillary
+		else:
+			bigger_capillary = capillary
+			smaller_capillary = self
+		
+		radius_diff = 0.5 * (bigger_capillary.inner_diameter - smaller_capillary.outer_diameter)
+		return center_distance <= radius_diff
+
+
+	def is_outside(self, capillary):
+		'''
+			Checks if the capillaries are outside each other,
+				returning 1 if they are nested, or 0 if they aren't.
+
+			capillary:Capillary     Capillary to check against
+		'''
+		radius_sum = 0.5 * (self.outer_diameter + capillary.outer_diameter)
+		center_distance = np.linalg.norm(self.position - capillary.position)
+		
+		return center_distance > radius_sum
+
+
+	def is_colliding(self, capillary):
+		if self.is_outside(capillary): return False
+		if self.is_inside(capillary): return False
+		return True
+
+
+
+def export_capillary_list(outside_diameter, capillary_list, text_path=None, image_path=None):
+	if text_path is not None:
+		with open(text_path, 'w') as fp:
+			fp.write(f"outside diameter: {outside_diameter}\n")
+			fp.write(f"capillary list:\n")
+			for c in capillary_list:
+				fp.write(c.to_str()+'\n')
+	
+	if image_path is None:
+		return
+
+	fig = plt.figure(figsize=(10,10))
+	ax = fig.add_axes(111)
+	ax.add_patch( Circle((0,0), outside_diameter/2, facecolor='grey', alpha=0.5) )
+
+	colors = list( mcolors.TABLEAU_COLORS.values() )
+	color_index = 0
+	for c in capillary_list:
+		color = colors[color_index]
+		ax.add_patch( Circle(c.position, c.outer_diameter/2, facecolor=color) )
+		color_index = (color_index+1) % len(colors)
+
+	ax.set_xlim(-outside_diameter/2, outside_diameter/2)
+	ax.set_ylim(-outside_diameter/2, outside_diameter/2)
+	fig.savefig(image_path, dpi=200)
+
+	
+
+
+def random_circular_position(max_diameter):
+	r = np.sqrt( np.random.random() ) *0.5*max_diameter
+	theta = np.random.random() * 2*np.pi
+	return np.array([np.cos(theta)*r, np.sin(theta)*r])
+
+
+def closest_capillary(index, capillary_list):
+	capillary = capillary_list[index]
+	closest_dist = None
+	for i, c in enumerate(capillary_list):
+		if i == index: continue
+
+		dist = np.linalg.norm(c.position - capillary.position)
+		if closest_dist is None:
+			closest_dist = dist
+			continue
+		if closest_dist > dist:
+			closest_dist = dist
+			continue
+
+	if closest_dist is None:
+		closest_dist = np.inf
+	return closest_dist
+
+
+
+def cost_function(outer_capillary, capillary_list):
+	penalty_cost = 1000
+	reward_mult = 70*len(capillary_list)
+	cost = 0
+	for i, c in enumerate(capillary_list):
+		cost -= c.ratio*reward_mult
+		if not c.is_inside(outer_capillary):
+			cost+=penalty_cost
+		
+		for c2 in capillary_list[i+1:]:
+			if c.is_inside(c2):
+				cost+=penalty_cost
+				continue
+			if c.is_colliding(c2):
+				cost+=penalty_cost
+	return cost
+
+def annealing_packing(outside_diameter, diameter_df, must_have=None,
+					  temp=1e5, min_temp=1e-10, cool_rate=0.999,
+					  max_iter=100000, cooling_type='exp'):
+
+	T_start = temp
+
+	diameter_df['Ratio'] = diameter_df['Internal Diameter'] / diameter_df['External Diameter']
+	diameter_df.sort_values(by='Ratio', ascending=False)
+
+	lesser_diameter = np.min(diameter_df['External Diameter'])
+	greater_diameter = np.max(diameter_df['External Diameter'])
+	position_diameter = outside_diameter - lesser_diameter
+
+	outer_capillary = Capillary(0, 0, outside_diameter, outside_diameter)
+	if must_have is None:
+		capillary_list = []
+	else:
+		if np.ndim(must_have) > 0:
+			capillary_list = must_have
+		else:
+			capillary_list = [must_have]
+
+	must_have_N = len(capillary_list)
+	# Absolute maximum number of inner cappilaries if they were to completelly pack the outer one
+	max_N = int(outside_diameter**2 / lesser_diameter**2) - must_have_N
+	min_N = int(outside_diameter**2 / greater_diameter**2)
+
+	def change_position(index, c_list):
+		c_list[index].position = random_circular_position(position_diameter)*temp/T_start
+		return c_list[index]
+			
+	def change_diameter(index, c_list):
+		diameter_index = np.random.randint(len(diameter_df))
+		c_list[index].inner_diameter = diameter_df.iloc[diameter_index]['Internal Diameter']
+		c_list[index].outer_diameter = diameter_df.iloc[diameter_index]['External Diameter']
+		return c_list[index]
+
+	def new_capillary(c_list):
+		position = random_circular_position(position_diameter)
+		d_index = np.random.randint(len(diameter_df))
+		df_line = diameter_df.iloc[d_index]
+		c = Capillary(position_x=position[0], position_y=position[1],
+					  outer_diameter=df_line['External Diameter'], inner_diameter=df_line['Internal Diameter'])
+		c_list.append(c)
+
+		return c
+		
+
+	best_solution = capillary_list
+	best_cost = cost_function(outer_capillary, capillary_list)
+	last_changed_iter = 0
+	cost = best_cost
+	for iteration in range(max_iter):
+		temp_list = deepcopy(capillary_list)
+		if iteration%100 == 0:
+			print(f"Iteration #{iteration}/{max_iter}.\tCurrent cost: {cost:5.0f}.\tCurrent best cost:{best_cost:5.0f}.\tTemperature={temp:.2e}")
+		p = np.random.random()
+		if (p < 0.25 or len(temp_list) < min_N) and len(temp_list) < max_N:
+			prev_len = len(temp_list)
+			new_capillary(temp_list)
+			if len(temp_list) > prev_len+1:
+				print("Appended twice")
+				exit()
+		elif p < 0.5:
+			index = np.random.randint(must_have_N, len(temp_list))
+			temp_list.pop(index)
+		elif p < 0.75:
+			index = np.random.randint(must_have_N, len(temp_list))
+			temp_list[index] = change_position(index, temp_list)
+		else:
+			index = np.random.randint(must_have_N, len(temp_list))
+			temp_list[index] = change_diameter(index, temp_list)
+
+
+		new_cost = cost_function(outer_capillary, temp_list)
+		delta = new_cost - cost
+		if delta < 0:
+			accept = True
+		else:
+			accept = np.random.random() < np.exp(-delta/temp)
+
+		if new_cost < best_cost:
+			best_cost = new_cost
+			best_solution = deepcopy(temp_list)
+
+		if accept:
+			cost = new_cost
+			capillary_list = deepcopy(temp_list)
+			last_changed_iter = iteration
+
+		# Raises temperature if it "stabilized" too much
+		if iteration-last_changed_iter > 100:
+			temp = max(temp, T_start * (1-iteration/max_iter))
+
+		if cooling_type=='exp':
+			temp *= cool_rate
+		elif cooling_type=='lin':
+			temp -= (T_start-min_temp)/max_iter
+		else:
+			raise(ValueError("Incorret cooling type."))
+		if temp < min_temp:
+			break
+
+	return best_solution
+	
+
+if __name__ == "__main__":
+	import pandas as pd
+	import re
+	from os import path, listdir, remove, walk
+	from time import time
+
+	t0 = time()
+	log_path = './main.log'
+
+	def log(message, tab_count=1):
+		t1 = time() - t0
+		logstr = f"{t1:.4f}s passed. {'\t'*tab_count}{message}\n"
+		print(logstr, end='')
+		with open(log_path, 'a+') as fp:
+			fp.write(logstr)
+
+	t_start = t0
+	overall_log_path = log_path
+	def main_log(*args, **kwargs):
+		global t0, log_path
+		t_prev = t0
+		path_prev = log_path
+
+		t0 = t_start
+		log_path = overall_log_path
+		log(*args, **kwargs)
+
+		t0 = t_prev
+		log_path = path_prev
+
+
+
+	examples_path = "./Examples"
+	# examples_directories = listdir(examples_path)
+	examples_directories = next(walk(examples_path))[1]
+
+	for ex_dir in examples_directories:
+		main_log(f"Starting example {ex_dir}.\n")
+
+		t0 = time()
+		ex_path = path.join(examples_path, ex_dir)
+		log_path = path.join(ex_path, "output.log")
+		
+		if path.isfile(log_path):
+			remove(log_path)
+		log("Log file created.\n")
+
+		ex_input = path.join(ex_path, "input")
+		ex_txtoutput = path.join(ex_path, "output")
+		ex_pngoutput = path.join(ex_path, "output.png")
+
+		with open(ex_input, 'r') as fp:
+			line = fp.readline()
+			has_outer_diam = "diameter" in line
+			if has_outer_diam:
+				line = line.replace(',', '.')
+				# This regex matches floating point numbers, including:
+				#	0.2 - .2 - 2 - 200 - etc
+				outside_diameter = float( re.compile(r'[0-9]*\.?[0-9]+').search(line).group() )
+			else:
+				outside_diameter = float(input("Insert outside diameter: "))
+			
+		log(f"Packing for outside diameter of {outside_diameter:.4f}.\n")
+
+		capillary_data = pd.read_csv(ex_input, sep='\t', header=int(has_outer_diam))
+		log(f"Read capillary diameter file.")
+		log(capillary_data.columns.values, tab_count=2)
+		for i in range(capillary_data.shape[0]):
+			ending = '\n' if i==capillary_data.shape[0]-1 else ''
+			log(str(capillary_data.iloc[i].values) + ending, tab_count=2)
+
+		log("Starting annealing packing.\n")
+		optimized = annealing_packing(outside_diameter, capillary_data)
+		log("Finished annealing packing.\n")
+		log("Exporting annealing packing.\n")
+		export_capillary_list(outside_diameter, optimized, ex_txtoutput, ex_pngoutput)
+
+		main_log(f"Finished example {ex_dir}.\n")
+
+
+	main_log(f"Finished program.")
