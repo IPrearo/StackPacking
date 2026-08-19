@@ -1,10 +1,10 @@
 outside diameter: 25.0
 capillary list:
-position_x: -6.766093735666529	position_y: 2.1918921074866495	outer_diameter: 5.0	inner_diameter: 3.0
-position_x: -8.113146301323436	position_y: -3.368655355469734	outer_diameter: 5.0	inner_diameter: 3.0
-position_x: -0.0006689268407778038	position_y: -6.524518628921924e-05	outer_diameter: 5.0	inner_diameter: 3.0
-position_x: -2.4855334438194925	position_y: -5.119413758635283	outer_diameter: 5.0	inner_diameter: 3.0
-position_x: 4.571200890708781	position_y: -5.429059861174326	outer_diameter: 8.0	inner_diameter: 6.0
-position_x: 9.401438167979425	position_y: -0.7660034716772768	outer_diameter: 5.0	inner_diameter: 3.0
-position_x: 5.33596445960602	position_y: 3.425571464160263	outer_diameter: 5.0	inner_diameter: 3.0
-position_x: -1.5824364369903747	position_y: 8.401962816274848	outer_diameter: 7.0	inner_diameter: 5.0
+position_x: -7.0664187567391625	position_y: 2.434928991707519	outer_diameter: 8.0	inner_diameter: 6.0
+position_x: 3.7012340528482994	position_y: -6.519267931111234	outer_diameter: 8.0	inner_diameter: 6.0
+position_x: -3.2978980050182227	position_y: 9.231808695099827	outer_diameter: 5.0	inner_diameter: 3.0
+position_x: 6.731761268940735	position_y: 6.786447853851402	outer_diameter: 5.0	inner_diameter: 3.0
+position_x: 7.69409561181543	position_y: 0.8641246084920318	outer_diameter: 7.0	inner_diameter: 5.0
+position_x: 2.5794524063297963	position_y: 9.57182594658543	outer_diameter: 5.0	inner_diameter: 3.0
+position_x: -4.792103454180116	position_y: -5.7551558622207795	outer_diameter: 8.0	inner_diameter: 6.0
+position_x: -0.007180137727733366	position_y: 0.006315858343404085	outer_diameter: 5.0	inner_diameter: 3.0

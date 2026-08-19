@@ -6,6 +6,10 @@ from matplotlib.patches import Circle
 
 from copy import deepcopy
 
+epsilon = 1e-8
+polar_to_cartesian = lambda r, t: np.array([r*np.cos(t), r*np.sin(t)])
+
+
 class Ring:
 	def __init__(self, outer_diameter, inner_diameter):
 		self.outer_diameter = outer_diameter
@@ -200,7 +204,7 @@ def closest_capillary(index, capillary_list):
 
 def cost_function(outer_capillary, capillary_list):
 	penalty_cost = 1000
-	reward_mult = 70*len(capillary_list)
+	reward_mult = 80*len(capillary_list)
 	cost = 0
 	for i, c in enumerate(capillary_list):
 		cost -= c.ratio*reward_mult
@@ -215,14 +219,16 @@ def cost_function(outer_capillary, capillary_list):
 				cost+=penalty_cost
 	return cost
 
+
 def annealing_packing(outside_diameter, diameter_df, must_have=None,
-					  temp=1e5, min_temp=1e-10, cool_rate=0.999,
+					  temp=1e5, min_temp=1e-10, cool_rate=0.9999,
 					  max_iter=100000, cooling_type='exp'):
 
 	T_start = temp
 
 	diameter_df['Ratio'] = diameter_df['Internal Diameter'] / diameter_df['External Diameter']
 	diameter_df.sort_values(by='Ratio', ascending=False)
+	N_diameters = diameter_df.shape[0]
 
 	lesser_diameter = np.min(diameter_df['External Diameter'])
 	greater_diameter = np.max(diameter_df['External Diameter'])
@@ -247,20 +253,129 @@ def annealing_packing(outside_diameter, diameter_df, must_have=None,
 		return c_list[index]
 			
 	def change_diameter(index, c_list):
-		diameter_index = np.random.randint(len(diameter_df))
+		diameter_index = np.random.randint(N_diameters)
 		c_list[index].inner_diameter = diameter_df.iloc[diameter_index]['Internal Diameter']
 		c_list[index].outer_diameter = diameter_df.iloc[diameter_index]['External Diameter']
 		return c_list[index]
 
 	def new_capillary(c_list):
-		position = random_circular_position(position_diameter)
-		d_index = np.random.randint(len(diameter_df))
-		df_line = diameter_df.iloc[d_index]
+		# The only possible pivot capillary is the outside one
+		if len(c_list) == 0:
+			d_index = np.random.randint(0, N_diameters)
+			df_line = diameter_df.iloc[d_index]
+			angle = np.random.random()*2*np.pi
+			r = 0.5*(outside_diameter - df_line['External Diameter'])
+			position = polar_to_cartesian(r, angle)
+			c = Capillary(position_x=position[0], position_y=position[1],
+						outer_diameter=df_line['External Diameter'], inner_diameter=df_line['Internal Diameter'])
+			c_list.append(c)
+			return True
+
+		good_pivots = False
+		# Tries a limited number of times to find pivots that allow for new capillaries
+		for i in range(20):
+			if good_pivots: break
+
+			# Chooses 2 pivot capillaries for the new one to be tangential to 
+			pivot_indexes = np.random.choice(np.arange(len(c_list)+1), 2, replace=False)
+			# The outer one is special as all capillaries are inside it instead of outside
+			has_outside = len(c_list) in pivot_indexes
+			# Ensures the outside one is on the zero index so we don't need to code both cases
+			if pivot_indexes[1] == len(c_list):
+				pivot_indexes = [pivot_indexes[1], pivot_indexes[0]]
+
+			if has_outside:
+				pivots = [outer_capillary, c_list[pivot_indexes[1]]]
+			else:
+				pivots = [c_list[i] for i in pivot_indexes]
+
+			pivot_distance = np.linalg.norm(pivots[0].position - pivots[1].position)
+			
+			# Handles the case of a capillary in the middle and the outer capillary being chosen together
+			if pivot_distance < epsilon:
+				continue
+
+			if has_outside:
+				pivot_wall_distance = -pivot_distance + 0.5*(outside_diameter - pivots[1].outer_diameter)
+			else:
+				pivot_wall_distance = pivot_distance - 0.5*(pivots[0].outer_diameter + pivots[1].outer_diameter)
+
+			if pivot_wall_distance <= greater_diameter + epsilon:
+				good_pivots = True
+		if not good_pivots:
+			return False
+
+		# Filters only sufficient capillary diameters
+		limited_df = diameter_df[diameter_df['External Diameter'] >= pivot_wall_distance]
+		N_limited_df = limited_df.shape[0]
+
+		d_index_order = np.random.choice(np.arange(N_limited_df), N_limited_df, replace=False)
+		d_index = 0
+		bad_position = True
+		while bad_position:
+			# Fails to add a new capillary for this pivot
+			if d_index >= N_limited_df: return
+
+			df_line = diameter_df.iloc[d_index]
+			out_d = df_line['External Diameter']
+
+			max_pos_r = 0.5*(outside_diameter - out_d)
+
+			R = [0.5*(p.outer_diameter + out_d) for p in pivots]
+			if has_outside:
+				R[0] = 0.5*(outside_diameter - out_d)
+
+			# Calculates the position of intersection for two circles in the X axis
+			#	with the same radii as the pivots+the chosen capillary
+			x_prime2 = (pivot_distance**2 - R[1]**2 + R[0]**2) / (2*pivot_distance)
+			y_prime2_squared = R[0]**2 - x_prime2**2 + epsilon
+
+			x_prime2 = np.ones(2)*x_prime2
+			try:
+				y_prime2 = np.array([ np.sqrt(y_prime2_squared), -np.sqrt(y_prime2_squared) ], dtype=float)
+			except(e):
+				print(f"y_prime2_squared: {y_prime2_squared}\nx_prime2: {x_prime2}")
+				y_prime2 = np.array([ np.sqrt(y_prime2_squared), -np.sqrt(y_prime2_squared) ], dtype=float)
+
+			positions_prime2 = [x_prime2, y_prime2]
+
+			del y_prime2_squared
+
+			# Rotates the axis such that pivot 0 is still the origin, but pivot 1 has the correct angle with pivot 0
+			pos1_prime = pivots[1].position - pivots[0].position
+			c = pos1_prime[0] / np.linalg.norm(pos1_prime)
+			angle_prime = np.arccos( c )
+			s = np.sin(angle_prime)
+			rot_matrix = [[c, -s], [s, c]]
+			positions_prime = np.matmul(rot_matrix, positions_prime2)
+
+			del positions_prime2, rot_matrix, angle_prime, c, s, pos1_prime
+
+			# Adds the pivot 0 position back, so that the calculated positions
+			# 	are now in the main frame of reference
+			positions = np.transpose(positions_prime) + np.array([pivots[0].position, pivots[0].position])
+
+			del positions_prime
+
+			# Checks if they are usable (inside the main capillary)
+			usable_positions = positions[np.linalg.norm(positions, axis=1) <= max_pos_r+epsilon]
+			if len(usable_positions) < 1:
+				# print("positions:")
+				# print(positions)
+				# print(np.linalg.norm(positions, axis=1))
+				# print(out_d)
+				d_index += 1
+				continue
+			
+			# Chooses one of the possible positions at random
+			position = usable_positions[np.random.randint(len(usable_positions))]
+			bad_position = False
+
 		c = Capillary(position_x=position[0], position_y=position[1],
 					  outer_diameter=df_line['External Diameter'], inner_diameter=df_line['Internal Diameter'])
 		c_list.append(c)
 
-		return c
+		return True
 		
 
 	best_solution = capillary_list
@@ -274,10 +389,9 @@ def annealing_packing(outside_diameter, diameter_df, must_have=None,
 		p = np.random.random()
 		if (p < 0.25 or len(temp_list) < min_N) and len(temp_list) < max_N:
 			prev_len = len(temp_list)
-			new_capillary(temp_list)
-			if len(temp_list) > prev_len+1:
-				print("Appended twice")
-				exit()
+			appended = new_capillary(temp_list)
+			# if appended:
+			# 	print("New capillary!")
 		elif p < 0.5:
 			index = np.random.randint(must_have_N, len(temp_list))
 			temp_list.pop(index)
@@ -316,6 +430,7 @@ def annealing_packing(outside_diameter, diameter_df, must_have=None,
 		else:
 			raise(ValueError("Incorret cooling type."))
 		if temp < min_temp:
+			print("Stopped from temperature.")
 			break
 
 	return best_solution
