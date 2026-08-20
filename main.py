@@ -1,10 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 
 import matplotlib.colors as mcolors
 from matplotlib.patches import Circle
 
 from copy import deepcopy
+
+import yaml
 
 epsilon = 1e-8
 polar_to_cartesian = lambda r, t: np.array([r*np.cos(t), r*np.sin(t)])
@@ -173,8 +176,6 @@ def export_capillary_list(outside_diameter, capillary_list, text_path=None, imag
 	ax.set_ylim(-outside_diameter/2, outside_diameter/2)
 	fig.savefig(image_path, dpi=200)
 
-	
-
 
 def random_circular_position(max_diameter):
 	r = np.sqrt( np.random.random() ) *0.5*max_diameter
@@ -201,9 +202,8 @@ def closest_capillary(index, capillary_list):
 	return closest_dist
 
 
-
 def cost_function(outer_capillary, capillary_list):
-	penalty_cost = 1000
+	penalty_cost = 2000
 	reward_mult = 80*len(capillary_list)
 	cost = 0
 	for i, c in enumerate(capillary_list):
@@ -245,15 +245,15 @@ def annealing_packing(outside_diameter, diameter_df, must_have=None,
 
 	must_have_N = len(capillary_list)
 	# Absolute maximum number of inner cappilaries if they were to completelly pack the outer one
-	max_N = int(outside_diameter**2 / lesser_diameter**2) - must_have_N
-	min_N = int(outside_diameter**2 / greater_diameter**2)
+	max_N = int(outside_diameter**2 / lesser_diameter**2)
+	min_N = max( int(outside_diameter**2 / greater_diameter**2), must_have_N+1 )
 
 	def change_position(index, c_list):
-		c_list[index].position = random_circular_position(position_diameter)*temp/T_start
+		c_list[index].position += random_circular_position(position_diameter)*temp/T_start
 		return c_list[index]
 			
 	def change_diameter(index, c_list):
-		diameter_index = np.random.randint(N_diameters)
+		diameter_index = np.random.randint(0, N_diameters)
 		c_list[index].inner_diameter = diameter_df.iloc[diameter_index]['Internal Diameter']
 		c_list[index].outer_diameter = diameter_df.iloc[diameter_index]['External Diameter']
 		return c_list[index]
@@ -387,12 +387,12 @@ def annealing_packing(outside_diameter, diameter_df, must_have=None,
 		if iteration%100 == 0:
 			print(f"Iteration #{iteration}/{max_iter}.\tCurrent cost: {cost:5.0f}.\tCurrent best cost:{best_cost:5.0f}.\tTemperature={temp:.2e}")
 		p = np.random.random()
-		if (p < 0.25 or len(temp_list) < min_N) and len(temp_list) < max_N:
+		if (p < 0.25 or len(temp_list) < min_N) and (len(temp_list) < max_N):
 			prev_len = len(temp_list)
 			appended = new_capillary(temp_list)
 			# if appended:
 			# 	print("New capillary!")
-		elif p < 0.5:
+		elif p < 0.5 and len(temp_list) > must_have_N:
 			index = np.random.randint(must_have_N, len(temp_list))
 			temp_list.pop(index)
 		elif p < 0.75:
@@ -434,11 +434,52 @@ def annealing_packing(outside_diameter, diameter_df, must_have=None,
 			break
 
 	return best_solution
+
+
+def read_input(input_file):
+	# This regex matches floating point numbers, including:
+	#	0.2 - .2 - 2 - 200 - etc
+	# float_regex =re.compile(r'[0-9]*\.?[0-9]+')
+
+	header = 0
+	with open(input_file, 'r') as fp:
+		yaml_str = ""
+		line = fp.readline()
+		while line:
+			if "=-"*20 in line: break
+			yaml_str += line + '\n'
+			header += 1
+			line = fp.readline()
+
+		try:
+			yaml_data = yaml.safe_load(yaml_str)
+		except:
+			yaml_data = None
+
+	if yaml_data is None:
+		has_outer_diam = False
+		required = []
+	else:
+		header += 1
+		has_outer_diam = "outside_diameter" in yaml_data.keys()
+		if "required" in yaml_data.keys():
+			required = [Capillary(**r) for r in yaml_data['required']]
+		else:
+			required = []
+
+	if has_outer_diam:
+		outside_diameter = yaml_data['outside_diameter']
+	else:
+		outside_diameter = float(input("Insert outside diameter: "))
+
+	capillary_data = pd.read_csv(input_file, sep='\t', header=header)
+
+	return {'outside_diameter': outside_diameter,
+			'required_capillaries': required,
+			'capillary_data': capillary_data}
 	
 
 if __name__ == "__main__":
-	import pandas as pd
-	import re
 	from os import path, listdir, remove, walk
 	from time import time
 
@@ -487,28 +528,26 @@ if __name__ == "__main__":
 		ex_txtoutput = path.join(ex_path, "output")
 		ex_pngoutput = path.join(ex_path, "output.png")
 
-		with open(ex_input, 'r') as fp:
-			line = fp.readline()
-			has_outer_diam = "diameter" in line
-			if has_outer_diam:
-				line = line.replace(',', '.')
-				# This regex matches floating point numbers, including:
-				#	0.2 - .2 - 2 - 200 - etc
-				outside_diameter = float( re.compile(r'[0-9]*\.?[0-9]+').search(line).group() )
-			else:
-				outside_diameter = float(input("Insert outside diameter: "))
-			
-		log(f"Packing for outside diameter of {outside_diameter:.4f}.\n")
+		input_data = read_input(ex_input)
+		outside_diameter = input_data['outside_diameter']
+		required_capillaries = input_data['required_capillaries']
+		capillary_data = input_data['capillary_data']
 
-		capillary_data = pd.read_csv(ex_input, sep='\t', header=int(has_outer_diam))
 		log(f"Read capillary diameter file.")
 		log(capillary_data.columns.values, tab_count=2)
 		for i in range(capillary_data.shape[0]):
 			ending = '\n' if i==capillary_data.shape[0]-1 else ''
 			log(str(capillary_data.iloc[i].values) + ending, tab_count=2)
 
+		log(f"Required capillaries:")
+		for i, req_c in enumerate(required_capillaries):
+			ending = '\n' if i==len(required_capillaries)-1 else ''
+			log(req_c.to_str() + ending, tab_count=2)
+			
+		log(f"Packing for outside diameter of {outside_diameter:.4f}.\n")
+
 		log("Starting annealing packing.\n")
-		optimized = annealing_packing(outside_diameter, capillary_data)
+		optimized = annealing_packing(outside_diameter, capillary_data, must_have=required_capillaries)
 		log("Finished annealing packing.\n")
 		log("Exporting annealing packing.\n")
 		export_capillary_list(outside_diameter, optimized, ex_txtoutput, ex_pngoutput)

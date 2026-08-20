@@ -1,0 +1,20 @@
+outside_diameter: 21
+required: [
+    {position_x: 0.00, position_y: 0.00, outer_diameter: 10, inner_diameter: 7 },
+    {position_x: 7.75, position_y: 0.00, outer_diameter: 5, inner_diameter: 3 },
+    {position_x: 2.39, position_y: 7.37, outer_diameter: 5, inner_diameter: 3 },
+    {position_x: -6.27, position_y: 4.56, outer_diameter: 5, inner_diameter: 3 },
+    {position_x: -6.27, position_y: -4.56, outer_diameter: 5, inner_diameter: 3 },
+    {position_x: 2.39, position_y: -7.37, outer_diameter: 5, inner_diameter: 3 },
+    {position_x: 7.75, position_y: -0.00, outer_diameter: 5, inner_diameter: 3 },
+]
+=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+External Diameter	Internal Diameter
+10	8
+10	7
+7	5
+8	6
+5	3
+6	0
+3	0
+2	0

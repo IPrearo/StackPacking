@@ -1,0 +1,11 @@
+outside diameter: 21
+capillary list:
+position_x: 0.0	position_y: 0.0	outer_diameter: 10.0	inner_diameter: 7.0
+position_x: 7.75	position_y: 0.0	outer_diameter: 5.0	inner_diameter: 3.0
+position_x: 2.39	position_y: 7.37	outer_diameter: 5.0	inner_diameter: 3.0
+position_x: -6.27	position_y: 4.56	outer_diameter: 5.0	inner_diameter: 3.0
+position_x: -6.27	position_y: -4.56	outer_diameter: 5.0	inner_diameter: 3.0
+position_x: 2.39	position_y: -7.37	outer_diameter: 5.0	inner_diameter: 3.0
+position_x: 7.75	position_y: -0.0	outer_diameter: 5.0	inner_diameter: 3.0
+position_x: -2.427841128341463	position_y: 5.585289119176558	outer_diameter: 2.0	inner_diameter: 0.0
+position_x: -1.4726952542256262	position_y: 8.40903098268667	outer_diameter: 3.0	inner_diameter: 0.0
