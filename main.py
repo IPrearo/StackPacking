@@ -446,7 +446,7 @@ def read_input(input_file):
 		yaml_str = ""
 		line = fp.readline()
 		while line:
-			if "=-"*20 in line: break
+			if "=-"*5 in line: break
 			yaml_str += line + '\n'
 			header += 1
 			line = fp.readline()
